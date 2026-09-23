@@ -1,26 +1,17 @@
-package main
+package server
 
 import (
 	"bytes"
 	"context"
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 )
-
-//go:embed web/*
-var assets embed.FS
 
 type Event struct {
 	ID       string `json:"id"`
@@ -30,36 +21,7 @@ type Event struct {
 	Location string `json:"location"`
 	Status   string `json:"status"`
 }
-type Cache struct {
-	Fighters     map[string]CardCache `json:"fighters,omitempty"`
-	Cards        map[string]CardCache `json:"cards,omitempty"`
-	RequestTimes []time.Time          `json:"requestTimes,omitempty"`
-	Events       []Event              `json:"events"`
-	Updated      time.Time            `json:"updatedAt"`
-	Attempt      time.Time            `json:"attemptAt"`
-	Month        string               `json:"month"`
-	Requests     int                  `json:"requests"`
-}
-type App struct {
-	mu              sync.Mutex
-	cache           Cache
-	key, base, file string
-	client          *http.Client
-}
 
-func (a *App) save() error {
-	if err := os.MkdirAll(filepath.Dir(a.file), 0700); err != nil {
-		return err
-	}
-	b, err := json.Marshal(a.cache)
-	if err != nil {
-		return err
-	}
-	if err = os.WriteFile(a.file+".tmp", b, 0600); err != nil {
-		return err
-	}
-	return os.Rename(a.file+".tmp", a.file)
-}
 func str(m map[string]any, keys ...string) string {
 	for _, k := range keys {
 		if s, ok := m[k].(string); ok && s != "" {
@@ -192,66 +154,4 @@ func (a *App) calendar(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(w).Encode(map[string]any{"events": events, "configured": configured, "updatedAt": a.cache.Updated, "stale": stale, "requests": a.cache.Requests, "budget": 450, "message": message})
-}
-func (a *App) handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/events", a.calendar)
-	mux.HandleFunc("GET /api/fighters/{slug}", a.fighter)
-	mux.HandleFunc("GET /api/events/{id}/bouts", a.card)
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if path == "/" {
-			path = "/index.html"
-		}
-		if path != "/index.html" && path != "/style.css" && path != "/app.js" {
-			http.NotFound(w, r)
-			return
-		}
-		b, err := assets.ReadFile("web" + path)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		types := map[string]string{".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8"}
-		w.Header().Set("Content-Type", types[filepath.Ext(path)])
-		w.Write(b)
-	})
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: https://ufc.com https://www.ufc.com https://api.citoapi.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
-		mux.ServeHTTP(w, r)
-	})
-}
-func env(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-func main() {
-	if err := loadEnv(".env"); err != nil {
-		log.Fatal(err)
-	}
-	a := &App{key: os.Getenv("CITO_API_KEY"), base: "https://api.citoapi.com/api/v1", file: env("CACHE_FILE", "data/calendar.json"), client: &http.Client{Timeout: 20 * time.Second}}
-	if b, err := os.ReadFile(a.file); err == nil {
-		if err = json.Unmarshal(b, &a.cache); err != nil {
-			log.Fatalf("Invalid cache: %v", err)
-		}
-	} else if !os.IsNotExist(err) {
-		log.Fatal(err)
-	}
-	srv := &http.Server{Addr: env("ADDR", "127.0.0.1:4453"), Handler: a.handler(), ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 50 * time.Second, IdleTimeout: 60 * time.Second}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	go func() {
-		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		srv.Shutdown(shutdown)
-	}()
-	log.Printf("UFCfans: http://%s", srv.Addr)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
-	}
 }

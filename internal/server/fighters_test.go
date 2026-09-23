@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/json"
@@ -38,7 +38,7 @@ func TestFighterCache(t *testing.T) {
 	a := &App{key: "test", base: upstream.URL, client: upstream.Client(), file: filepath.Join(t.TempDir(), "cache.json"), cache: Cache{Cards: map[string]CardCache{"event": {Data: json.RawMessage(`[{"fighters":[{"fighterSlug":"test-fighter"}]}]`)}}}}
 	get := func(slug string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
-		a.handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/fighters/"+slug, nil))
+		a.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/fighters/"+slug, nil))
 		return w
 	}
 	if get("unknown").Code != 404 || calls != 0 {

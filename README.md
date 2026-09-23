@@ -30,11 +30,31 @@
 
 ![Профиль Joshua Van](docs/screenshots/fighter.jpg)
 
+## Структура проекта
+
+```text
+cmd/ufcfans/main.go       # точка входа и корректное завершение сервера
+internal/config/         # настройки окружения и загрузка .env
+internal/server/
+  app.go                 # создание приложения и восстановление кеша
+  routes.go              # HTTP-маршруты, статика и заголовки
+  client.go              # запросы к Cito API и общий лимит
+  cache.go               # модель кеша и сохранение на диск
+  events.go              # календарь и разбор событий
+  cards.go               # карды турниров
+  fighters.go            # профили и преобразование чисел API
+  *_test.go              # тесты рядом с реализацией
+web/                     # HTML, CSS, JavaScript и embed.go
+docs/screenshots/       # скриншоты для README
+```
+
+Команды выполняются из корня проекта: здесь находятся `.env` и каталог кеша `data/`.
+
 ## Запуск
 
 ```sh
 export CITO_API_KEY='ваш ключ Cito API'
-go run .
+go run ./cmd/ufcfans
 ```
 
 Откройте http://127.0.0.1:4453. Без ключа доступен экран подключения и явный деморежим с вымышленными турнирами. Ключ можно получить на https://citoapi.com/dashboard.
@@ -44,11 +64,11 @@ go run .
 ```sh
 go test -race ./...
 go vet ./...
-go build -o ufcfans .
+go build -o ufcfans ./cmd/ufcfans
 ./ufcfans
 ```
 
-В текущем окружении Go 1.23.1 имеет неполную стандартную библиотеку. Рабочая команда с уже установленным toolchain: `env -u GOROOT GOTOOLCHAIN=go1.25.3 go run .` (аналогично для тестов и сборки). Готовый бинарный файл можно запустить через `./ufcfans` без Go.
+В текущем окружении Go 1.23.1 имеет неполную стандартную библиотеку. Рабочая команда с уже установленным toolchain: `env -u GOROOT GOTOOLCHAIN=go1.25.3 go run ./cmd/ufcfans` (аналогично для тестов и сборки). Готовый бинарный файл можно запустить через `./ufcfans` без Go.
 
 ## Возможности
 

@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/json"
@@ -25,7 +25,7 @@ func TestCardCacheAndQuota(t *testing.T) {
 	a := &App{key: "test", base: upstream.URL, client: upstream.Client(), file: filepath.Join(t.TempDir(), "cache.json"), cache: Cache{Events: []Event{{ID: "ufc-test"}}}}
 	get := func(id string) map[string]any {
 		w := httptest.NewRecorder()
-		a.handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/events/"+id+"/bouts", nil))
+		a.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/events/"+id+"/bouts", nil))
 		if id == "unknown" {
 			if w.Code != 404 {
 				t.Fatal(w.Code)

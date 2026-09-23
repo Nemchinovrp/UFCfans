@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/json"
@@ -34,7 +34,7 @@ func TestCalendarCacheAndFailureBackoff(t *testing.T) {
 	a := &App{key: "secret", base: upstream.URL, file: filepath.Join(t.TempDir(), "cache.json"), client: upstream.Client()}
 	get := func() {
 		w := httptest.NewRecorder()
-		a.handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/events", nil))
+		a.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/events", nil))
 		if w.Code != 200 {
 			t.Fatal(w.Code)
 		}
@@ -73,7 +73,7 @@ func TestCalendarCacheAndFailureBackoff(t *testing.T) {
 func TestNoKeyMakesNoRequests(t *testing.T) {
 	a := &App{}
 	w := httptest.NewRecorder()
-	a.handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/events", nil))
+	a.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/events", nil))
 	if !strings.Contains(w.Body.String(), `"configured":false`) {
 		t.Fatal(w.Body.String())
 	}
