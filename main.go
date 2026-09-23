@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -30,11 +31,14 @@ type Event struct {
 	Status   string `json:"status"`
 }
 type Cache struct {
-	Events   []Event   `json:"events"`
-	Updated  time.Time `json:"updatedAt"`
-	Attempt  time.Time `json:"attemptAt"`
-	Month    string    `json:"month"`
-	Requests int       `json:"requests"`
+	Fighters     map[string]CardCache `json:"fighters,omitempty"`
+	Cards        map[string]CardCache `json:"cards,omitempty"`
+	RequestTimes []time.Time          `json:"requestTimes,omitempty"`
+	Events       []Event              `json:"events"`
+	Updated      time.Time            `json:"updatedAt"`
+	Attempt      time.Time            `json:"attemptAt"`
+	Month        string               `json:"month"`
+	Requests     int                  `json:"requests"`
 }
 type App struct {
 	mu              sync.Mutex
@@ -123,25 +127,12 @@ func decodeEvents(r io.Reader, status string) ([]Event, error) {
 	return events, nil
 }
 func (a *App) fetch(ctx context.Context, path, status string) ([]Event, error) {
-	a.cache.Requests++
-	// Persist the request counter before spending quota, including failed calls.
-	if err := a.save(); err != nil {
-		return nil, fmt.Errorf("cannot persist quota: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, "GET", a.base+path, nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://localhost", nil)
+	body, err := a.request(req, path)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("x-api-key", a.key)
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Cito API: HTTP %d", resp.StatusCode)
-	}
-	return decodeEvents(io.LimitReader(resp.Body, 4<<20), status)
+	return decodeEvents(bytes.NewReader(body), status)
 }
 func (a *App) calendar(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
@@ -205,6 +196,8 @@ func (a *App) calendar(w http.ResponseWriter, r *http.Request) {
 func (a *App) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/events", a.calendar)
+	mux.HandleFunc("GET /api/fighters/{slug}", a.fighter)
+	mux.HandleFunc("GET /api/events/{id}/bouts", a.card)
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if path == "/" {
@@ -226,7 +219,7 @@ func (a *App) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: https://ufc.com https://www.ufc.com https://api.citoapi.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
 		mux.ServeHTTP(w, r)
 	})
 }
